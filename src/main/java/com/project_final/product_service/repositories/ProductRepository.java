@@ -10,7 +10,7 @@ import java.math.BigDecimal;
 import java.util.List;
 
 @Repository
-public interface Repositories extends JpaRepository<Product, Long> {
+public interface ProductRepository extends JpaRepository<Product, Long> {
 
     // Buscar productos por nombre (contiene)
     @Query("SELECT p FROM Product p WHERE p.name LIKE %:name%")
