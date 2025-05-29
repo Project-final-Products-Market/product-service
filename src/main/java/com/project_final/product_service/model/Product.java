@@ -87,7 +87,7 @@ public class Product {
 
     public void setPrice(BigDecimal price) {
         if (price != null && price.compareTo(BigDecimal.ZERO) <= 0) {
-            throw ProductValidationException.invalidPrice(price.toString());
+            throw new ProductValidationException("El precio debe ser mayor que cero");
         }
         this.price = price;
         this.updatedAt = LocalDateTime.now();
@@ -99,7 +99,7 @@ public class Product {
 
     public void setStock(Integer stock) {
         if (stock != null && stock < 0) {
-            throw ProductValidationException.negativeStock(stock);
+            throw new ProductValidationException("El stock no puede ser negativo");
         }
         this.stock = stock;
         this.updatedAt = LocalDateTime.now();
@@ -122,14 +122,14 @@ public class Product {
     }
 
     @PreUpdate
-    protected void onUpdate() {
+    public void onUpdate() {
         this.updatedAt = LocalDateTime.now();
     }
 
     // Método para reducir stock con validación mejorada
     public void reduceStock(Integer quantity) {
         if (quantity == null || quantity <= 0) {
-            throw new ProductValidationException("quantity", "La cantidad debe ser mayor que cero");
+            throw new ProductValidationException("La cantidad debe ser mayor que cero");
         }
 
         if (this.stock < quantity) {
@@ -143,7 +143,7 @@ public class Product {
     // Método para aumentar stock con validación
     public void increaseStock(Integer quantity) {
         if (quantity == null || quantity <= 0) {
-            throw new ProductValidationException("quantity", "La cantidad debe ser mayor que cero");
+            throw new ProductValidationException("La cantidad debe ser mayor que cero");
         }
 
         this.stock += quantity;

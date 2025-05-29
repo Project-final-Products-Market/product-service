@@ -14,13 +14,12 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
+import java.util.Optional;
 
-// ========== IMPORTS ESTÁTICOS CORREGIDOS ==========
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
-// Removido: import static org.hamcrest.Matchers.*;
 
 @WebMvcTest(ProductController.class)
 class GlobalExceptionHandlerTest {
@@ -58,8 +57,10 @@ class GlobalExceptionHandlerTest {
         mockMvc.perform(get("/api/products/{id}", productId))
                 .andExpect(status().isNotFound())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.errorCode").value("PRODUCT_NOT_FOUND"))
-                .andExpect(jsonPath("$.message").value("Producto con ID 999 no encontrado"))
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Producto no encontrado"))
+                .andExpect(jsonPath("$.error").value("Producto con ID 999 no encontrado"))
+                .andExpect(jsonPath("$.productId").value(999))
                 .andExpect(jsonPath("$.timestamp").exists())
                 .andExpect(jsonPath("$.path").value("/api/products/999"));
 
@@ -70,7 +71,7 @@ class GlobalExceptionHandlerTest {
     void handleProductNotFoundException_OnUpdate_ShouldReturnNotFound() throws Exception {
         // Given
         Long productId = 999L;
-        when(productService.updateProduct(eq(productId), org.mockito.ArgumentMatchers.any(Product.class)))
+        when(productService.updateProduct(eq(productId), any(Product.class)))
                 .thenThrow(new ProductNotFoundException(productId));
 
         // When & Then
@@ -78,26 +79,33 @@ class GlobalExceptionHandlerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(testProduct)))
                 .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.errorCode").value("PRODUCT_NOT_FOUND"))
-                .andExpect(jsonPath("$.message").value("Producto con ID 999 no encontrado"));
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Error al actualizar producto"))
+                .andExpect(jsonPath("$.error").value("Producto con ID 999 no encontrado"))
+                .andExpect(jsonPath("$.productId").value(999));
 
-        verify(productService).updateProduct(eq(productId), org.mockito.ArgumentMatchers.any(Product.class));
+        verify(productService).updateProduct(eq(productId), any(Product.class));
     }
 
     @Test
     void handleProductNotFoundException_OnDelete_ShouldReturnNotFound() throws Exception {
         // Given
         Long productId = 999L;
-        doThrow(new ProductNotFoundException(productId))
-                .when(productService).deleteProduct(productId);
+        // El controlador llama a getProductById primero, no a deleteProduct
+        when(productService.getProductById(productId))
+                .thenReturn(Optional.empty());
 
         // When & Then
         mockMvc.perform(delete("/api/products/{id}", productId))
                 .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.errorCode").value("PRODUCT_NOT_FOUND"))
-                .andExpect(jsonPath("$.message").value("Producto con ID 999 no encontrado"));
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Producto no encontrado"))
+                .andExpect(jsonPath("$.productId").value(999))
+                .andExpect(jsonPath("$.timestamp").exists());
 
-        verify(productService).deleteProduct(productId);
+        // Verificar que solo se llamó a getProductById, no a deleteProduct
+        verify(productService).getProductById(productId);
+        verify(productService, never()).deleteProduct(productId);
     }
 
     //  TESTS PARA ProductValidationException
@@ -105,7 +113,7 @@ class GlobalExceptionHandlerTest {
     @Test
     void handleProductValidationException_EmptyName_ShouldReturnBadRequest() throws Exception {
         // Given
-        when(productService.createProduct(org.mockito.ArgumentMatchers.any(Product.class)))
+        when(productService.createProduct(any(Product.class)))
                 .thenThrow(ProductValidationException.emptyName());
 
         // When & Then
@@ -113,18 +121,18 @@ class GlobalExceptionHandlerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(testProduct)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.errorCode").value("PRODUCT_VALIDATION_ERROR"))
-                .andExpect(jsonPath("$.message").value("El nombre del producto no puede estar vacío"))
-                .andExpect(jsonPath("$.field").value("name"));
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Error al crear producto"))
+                .andExpect(jsonPath("$.error").value("El nombre del producto no puede estar vacío"));
 
-        verify(productService).createProduct(org.mockito.ArgumentMatchers.any(Product.class));
+        verify(productService).createProduct(any(Product.class));
     }
 
     @Test
     void handleProductValidationException_InvalidPrice_ShouldReturnBadRequest() throws Exception {
         // Given
         String invalidPrice = "-10.00";
-        when(productService.createProduct(org.mockito.ArgumentMatchers.any(Product.class)))
+        when(productService.createProduct(any(Product.class)))
                 .thenThrow(ProductValidationException.invalidPrice(invalidPrice));
 
         // When & Then
@@ -132,18 +140,18 @@ class GlobalExceptionHandlerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(testProduct)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.errorCode").value("PRODUCT_VALIDATION_ERROR"))
-                .andExpect(jsonPath("$.message").value("Precio inválido: " + invalidPrice + ". El precio debe ser mayor que cero"))
-                .andExpect(jsonPath("$.field").value("price"));
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Error al crear producto"))
+                .andExpect(jsonPath("$.error").value("Precio inválido: " + invalidPrice + ". El precio debe ser mayor que cero"));
 
-        verify(productService).createProduct(org.mockito.ArgumentMatchers.any(Product.class));
+        verify(productService).createProduct(any(Product.class));
     }
 
     @Test
     void handleProductValidationException_NegativeStock_ShouldReturnBadRequest() throws Exception {
         // Given
         Integer negativeStock = -5;
-        when(productService.createProduct(org.mockito.ArgumentMatchers.any(Product.class)))
+        when(productService.createProduct(any(Product.class)))
                 .thenThrow(ProductValidationException.negativeStock(negativeStock));
 
         // When & Then
@@ -151,17 +159,17 @@ class GlobalExceptionHandlerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(testProduct)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.errorCode").value("PRODUCT_VALIDATION_ERROR"))
-                .andExpect(jsonPath("$.message").value("Stock no puede ser negativo: " + negativeStock))
-                .andExpect(jsonPath("$.field").value("stock"));
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Error al crear producto"))
+                .andExpect(jsonPath("$.error").value("Stock no puede ser negativo: " + negativeStock));
 
-        verify(productService).createProduct(org.mockito.ArgumentMatchers.any(Product.class));
+        verify(productService).createProduct(any(Product.class));
     }
 
     @Test
     void handleProductValidationException_InvalidPriceRange_ShouldReturnBadRequest() throws Exception {
         // Given
-        when(productService.getProductsByPriceRange(org.mockito.ArgumentMatchers.any(BigDecimal.class), org.mockito.ArgumentMatchers.any(BigDecimal.class)))
+        when(productService.getProductsByPriceRange(any(BigDecimal.class), any(BigDecimal.class)))
                 .thenThrow(ProductValidationException.invalidPriceRange());
 
         // When & Then
@@ -169,16 +177,17 @@ class GlobalExceptionHandlerTest {
                         .param("minPrice", "100.00")
                         .param("maxPrice", "50.00"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.errorCode").value("PRODUCT_VALIDATION_ERROR"))
-                .andExpect(jsonPath("$.message").value("El precio mínimo no puede ser mayor que el precio máximo"));
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Error de validación"))
+                .andExpect(jsonPath("$.error").value("El precio mínimo no puede ser mayor que el precio máximo"));
 
-        verify(productService).getProductsByPriceRange(org.mockito.ArgumentMatchers.any(BigDecimal.class), org.mockito.ArgumentMatchers.any(BigDecimal.class));
+        verify(productService).getProductsByPriceRange(any(BigDecimal.class), any(BigDecimal.class));
     }
 
     //  TESTS PARA InsufficientStockException
 
     @Test
-    void handleInsufficientStockException_ShouldReturnConflict() throws Exception {
+    void handleInsufficientStockException_ShouldReturnBadRequest() throws Exception {
         // Given
         Long productId = 1L;
         Integer availableStock = 10;
@@ -190,12 +199,11 @@ class GlobalExceptionHandlerTest {
         // When & Then
         mockMvc.perform(put("/api/products/{id}/reduce-stock", productId)
                         .param("quantity", requestedQuantity.toString()))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.errorCode").value("INSUFFICIENT_STOCK"))
-                .andExpect(jsonPath("$.message").value("Stock insuficiente para el producto con ID 1. Stock disponible: 10, cantidad solicitada: 50"))
-                .andExpect(jsonPath("$.additionalInfo.productId").value(1))
-                .andExpect(jsonPath("$.additionalInfo.availableStock").value(10))
-                .andExpect(jsonPath("$.additionalInfo.requestedQuantity").value(50));
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Error al reducir stock"))
+                .andExpect(jsonPath("$.error").value("Stock insuficiente para el producto con ID 1. Stock disponible: 10, cantidad solicitada: 50"))
+                .andExpect(jsonPath("$.productId").value(1));
 
         verify(productService).reduceStock(productId, requestedQuantity);
     }
@@ -203,7 +211,7 @@ class GlobalExceptionHandlerTest {
     //  TESTS PARA StockOperationException
 
     @Test
-    void handleStockOperationException_ReductionFailed_ShouldReturnInternalServerError() throws Exception {
+    void handleStockOperationException_ReductionFailed_ShouldReturnBadRequest() throws Exception {
         // Given
         Long productId = 1L;
         Integer quantity = 10;
@@ -215,17 +223,17 @@ class GlobalExceptionHandlerTest {
         // When & Then
         mockMvc.perform(put("/api/products/{id}/reduce-stock", productId)
                         .param("quantity", quantity.toString()))
-                .andExpect(status().isInternalServerError())
-                .andExpect(jsonPath("$.errorCode").value("STOCK_OPERATION_ERROR"))
-                .andExpect(jsonPath("$.message").value("Error al reducir stock del producto con ID 1"))
-                .andExpect(jsonPath("$.additionalInfo.productId").value(1))
-                .andExpect(jsonPath("$.additionalInfo.operation").value("REDUCE"));
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Error al reducir stock"))
+                .andExpect(jsonPath("$.error").value("Error al reducir stock del producto con ID 1"))
+                .andExpect(jsonPath("$.productId").value(1));
 
         verify(productService).reduceStock(productId, quantity);
     }
 
     @Test
-    void handleStockOperationException_IncreaseFailed_ShouldReturnInternalServerError() throws Exception {
+    void handleStockOperationException_IncreaseFailed_ShouldReturnBadRequest() throws Exception {
         // Given
         Long productId = 1L;
         Integer quantity = 20;
@@ -237,11 +245,11 @@ class GlobalExceptionHandlerTest {
         // When & Then
         mockMvc.perform(put("/api/products/{id}/increase-stock", productId)
                         .param("quantity", quantity.toString()))
-                .andExpect(status().isInternalServerError())
-                .andExpect(jsonPath("$.errorCode").value("STOCK_OPERATION_ERROR"))
-                .andExpect(jsonPath("$.message").value("Error al aumentar stock del producto con ID 1"))
-                .andExpect(jsonPath("$.additionalInfo.productId").value(1))
-                .andExpect(jsonPath("$.additionalInfo.operation").value("INCREASE"));
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Error al aumentar stock"))
+                .andExpect(jsonPath("$.error").value("Error al aumentar stock del producto con ID 1"))
+                .andExpect(jsonPath("$.productId").value(1));
 
         verify(productService).increaseStock(productId, quantity);
     }
@@ -257,8 +265,9 @@ class GlobalExceptionHandlerTest {
         // When & Then
         mockMvc.perform(get("/api/products"))
                 .andExpect(status().isInternalServerError())
-                .andExpect(jsonPath("$.errorCode").value("INTERNAL_SERVER_ERROR"))
+                .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.message").value("Error interno del servidor"))
+                .andExpect(jsonPath("$.error").value("Ha ocurrido un error inesperado"))
                 .andExpect(jsonPath("$.timestamp").exists())
                 .andExpect(jsonPath("$.path").value("/api/products"));
 
@@ -276,8 +285,8 @@ class GlobalExceptionHandlerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(invalidProduct)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.errorCode").exists())
-                .andExpect(jsonPath("$.message").exists())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Error de validación"))
                 .andExpect(jsonPath("$.timestamp").exists());
     }
 
@@ -291,8 +300,9 @@ class GlobalExceptionHandlerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(invalidJson))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.errorCode").value("BAD_REQUEST"))
+                .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.message").value("Formato de datos inválido"))
+                .andExpect(jsonPath("$.error").value("Los datos enviados no pueden ser procesados"))
                 .andExpect(jsonPath("$.timestamp").exists());
     }
 
@@ -302,8 +312,9 @@ class GlobalExceptionHandlerTest {
         // When & Then
         mockMvc.perform(get("/api/products/search"))  // Missing 'name' parameter
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.errorCode").value("BAD_REQUEST"))
-                .andExpect(jsonPath("$.message").exists())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Parámetro requerido faltante"))
+                .andExpect(jsonPath("$.error").exists())
                 .andExpect(jsonPath("$.timestamp").exists());
     }
 
@@ -313,8 +324,9 @@ class GlobalExceptionHandlerTest {
         // When & Then
         mockMvc.perform(get("/api/products/invalid_id"))  // 'invalid_id' should be a Long
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.errorCode").value("BAD_REQUEST"))
-                .andExpect(jsonPath("$.message").exists())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Tipo de dato inválido"))
+                .andExpect(jsonPath("$.error").exists())
                 .andExpect(jsonPath("$.timestamp").exists());
     }
 }

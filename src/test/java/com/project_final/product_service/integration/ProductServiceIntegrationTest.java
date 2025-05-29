@@ -22,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -79,24 +80,37 @@ public class ProductServiceIntegrationTest {
     @Order(2)
     void createProduct_ShouldReturnCreatedProduct() {
         // Given
-        HttpEntity<Product> request = new HttpEntity<>(testProduct, headers);
+        HttpEntity<Map<String, Object>> request = new HttpEntity<>(Map.of(
+                "name", testProduct.getName(),
+                "description", testProduct.getDescription(),
+                "price", testProduct.getPrice(),
+                "stock", testProduct.getStock()
+        ), headers);
 
-        // When
-        ResponseEntity<Product> response = restTemplate.postForEntity(
-                baseUrl, request, Product.class
+        // When - Cambiar a esperar la estructura de respuesta del controlador
+        ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
+                baseUrl,
+                HttpMethod.POST,
+                request,
+                new ParameterizedTypeReference<Map<String, Object>>() {}
         );
 
-        // Then
+        // Then - CORREGIDO: Verificar estructura JSON de respuesta del controlador
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         assertThat(response.getBody()).isNotNull();
-        assertThat(response.getBody().getName()).isEqualTo(testProduct.getName());
-        assertThat(response.getBody().getPrice()).isEqualTo(testProduct.getPrice());
-        assertThat(response.getBody().getDescription()).isEqualTo(testProduct.getDescription());
-        assertThat(response.getBody().getStock()).isEqualTo(testProduct.getStock());
-        assertThat(response.getBody().getId()).isNotNull();
+        assertThat(response.getBody().get("success")).isEqualTo(true);
+        assertThat(response.getBody().get("message")).isEqualTo("Producto creado correctamente");
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> product = (Map<String, Object>) response.getBody().get("product");
+        assertThat(product.get("name")).isEqualTo(testProduct.getName());
+        assertThat(product.get("price")).isEqualTo(testProduct.getPrice().doubleValue());
+        assertThat(product.get("stock")).isEqualTo(testProduct.getStock());
+        assertThat(product.get("id")).isNotNull();
 
         // Verify database persistence
-        Optional<Product> savedProduct = productRepository.findById(response.getBody().getId());
+        Long productId = ((Number) product.get("id")).longValue();
+        Optional<Product> savedProduct = productRepository.findById(productId);
         assertThat(savedProduct).isPresent();
         assertThat(savedProduct.get().getName()).isEqualTo(testProduct.getName());
     }
@@ -168,27 +182,33 @@ public class ProductServiceIntegrationTest {
         Product savedProduct = productRepository.save(testProduct);
         Long productId = savedProduct.getId();
 
-        Product updateProduct = new Product();
-        updateProduct.setName("Producto Actualizado");
-        updateProduct.setDescription("Descripción actualizada");
-        updateProduct.setPrice(new BigDecimal("999.99"));
-        updateProduct.setStock(150);
+        Map<String, Object> updateProduct = Map.of(
+                "name", "Producto Actualizado",
+                "description", "Descripción actualizada",
+                "price", 999.99,
+                "stock", 150
+        );
 
-        HttpEntity<Product> request = new HttpEntity<>(updateProduct, headers);
+        HttpEntity<Map<String, Object>> request = new HttpEntity<>(updateProduct, headers);
 
-        // When
-        ResponseEntity<Product> response = restTemplate.exchange(
+        // When - CORREGIDO: Cambiar a esperar estructura JSON de respuesta
+        ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
                 baseUrl + "/" + productId,
                 HttpMethod.PUT,
                 request,
-                Product.class
+                new ParameterizedTypeReference<Map<String, Object>>() {}
         );
 
-        // Then
+        // Then - CORREGIDO: Verificar estructura JSON de respuesta
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isNotNull();
-        assertThat(response.getBody().getName()).isEqualTo("Producto Actualizado");
-        assertThat(response.getBody().getPrice()).isEqualTo(new BigDecimal("999.99"));
+        assertThat(response.getBody().get("success")).isEqualTo(true);
+        assertThat(response.getBody().get("message")).isEqualTo("Producto actualizado correctamente");
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> product = (Map<String, Object>) response.getBody().get("product");
+        assertThat(product.get("name")).isEqualTo("Producto Actualizado");
+        assertThat(product.get("price")).isEqualTo(999.99);
 
         // Verify database update
         Optional<Product> updatedProduct = productRepository.findById(productId);
@@ -198,21 +218,24 @@ public class ProductServiceIntegrationTest {
 
     @Test
     @Order(7)
-    void deleteProduct_WhenProductExists_ShouldReturnNoContent() {
+    void deleteProduct_WhenProductExists_ShouldReturnOk() {
         // Given
         Product savedProduct = productRepository.save(testProduct);
         Long productId = savedProduct.getId();
 
-        // When
-        ResponseEntity<Void> response = restTemplate.exchange(
+        // When - CORREGIDO: Cambiar a esperar estructura JSON de respuesta
+        ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
                 baseUrl + "/" + productId,
                 HttpMethod.DELETE,
                 null,
-                Void.class
+                new ParameterizedTypeReference<Map<String, Object>>() {}
         );
 
-        // Then
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+        // Then - CORREGIDO: Esperar 200 OK en lugar de 204 NO_CONTENT
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().get("success")).isEqualTo(true);
+        assertThat(response.getBody().get("message")).isEqualTo("Producto eliminado correctamente");
 
         // Verify product is deleted from database
         Optional<Product> deletedProduct = productRepository.findById(productId);
@@ -362,17 +385,19 @@ public class ProductServiceIntegrationTest {
         Long productId = savedProduct.getId();
         Integer quantityToReduce = 10;
 
-        // When
-        ResponseEntity<Boolean> response = restTemplate.exchange(
+        // When - CORREGIDO: Cambiar el tipo de respuesta de Boolean a Map<String, Object>
+        ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
                 baseUrl + "/" + productId + "/reduce-stock?quantity=" + quantityToReduce,
                 HttpMethod.PUT,
                 null,
-                Boolean.class
+                new ParameterizedTypeReference<Map<String, Object>>() {}
         );
 
-        // Then
+        // Then - CORREGIDO: Verificar la estructura JSON de respuesta
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(response.getBody()).isTrue();
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().get("success")).isEqualTo(true);
+        assertThat(response.getBody().get("message")).isEqualTo("Stock reducido correctamente");
 
         // Verify stock was reduced in database
         Optional<Product> updatedProduct = productRepository.findById(productId);
@@ -390,17 +415,19 @@ public class ProductServiceIntegrationTest {
         Long productId = savedProduct.getId();
         Integer quantityToIncrease = 20;
 
-        // When
-        ResponseEntity<Boolean> response = restTemplate.exchange(
+        // When - CORREGIDO: Cambiar el tipo de respuesta de Boolean a Map<String, Object>
+        ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
                 baseUrl + "/" + productId + "/increase-stock?quantity=" + quantityToIncrease,
                 HttpMethod.PUT,
                 null,
-                Boolean.class
+                new ParameterizedTypeReference<Map<String, Object>>() {}
         );
 
-        // Then
+        // Then - CORREGIDO: Verificar la estructura JSON de respuesta
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(response.getBody()).isTrue();
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().get("success")).isEqualTo(true);
+        assertThat(response.getBody().get("message")).isEqualTo("Stock aumentado correctamente");
 
         // Verify stock was increased in database
         Optional<Product> updatedProduct = productRepository.findById(productId);
@@ -487,17 +514,21 @@ public class ProductServiceIntegrationTest {
     @Order(17)
     void createProductWithInvalidData_ShouldHandleValidationErrors() {
         // Given - Product with invalid data (null name)
-        Product invalidProduct = new Product();
-        invalidProduct.setName(null); // Invalid: name is required
-        invalidProduct.setPrice(new BigDecimal("100.00"));
-        invalidProduct.setDescription("Test Description");
-        invalidProduct.setStock(10);
+        Map<String, Object> invalidProduct = Map.of(
+                "name", "",  // Invalid: empty name
+                "price", 100.00,
+                "description", "Test Description",
+                "stock", 10
+        );
 
-        HttpEntity<Product> request = new HttpEntity<>(invalidProduct, headers);
+        HttpEntity<Map<String, Object>> request = new HttpEntity<>(invalidProduct, headers);
 
         // When
-        ResponseEntity<Product> response = restTemplate.postForEntity(
-                baseUrl, request, Product.class
+        ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
+                baseUrl,
+                HttpMethod.POST,
+                request,
+                new ParameterizedTypeReference<Map<String, Object>>() {}
         );
 
         // Then - Should handle validation error (actual behavior depends on error handling implementation)

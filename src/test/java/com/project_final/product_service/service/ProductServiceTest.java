@@ -89,8 +89,6 @@ class ProductServiceTest {
         verify(productRepository, never()).save(any());
     }
 
-
-
     //  TESTS DE CONSULTA
 
     @Test
@@ -241,23 +239,32 @@ class ProductServiceTest {
     }
 
     @Test
-    void reduceStock_InsufficientStock_ThrowsInsufficientStockException() {
+    void reduceStock_InsufficientStock_ThrowsStockOperationException() {
         // Arrange
         when(productRepository.findById(1L)).thenReturn(Optional.of(testProductWithId));
 
-        // Act & Assert
-        assertThrows(InsufficientStockException.class,
+        // Act & Assert - Corregido para esperar StockOperationException
+        StockOperationException exception = assertThrows(StockOperationException.class,
                 () -> productService.reduceStock(1L, 100)); // Más del stock disponible
+
+        // Verificar que la causa original es InsufficientStockException
+        assertTrue(exception.getCause() instanceof InsufficientStockException);
+        assertTrue(exception.getMessage().contains("Error al reducir stock"));
+
+        verify(productRepository).findById(1L);
     }
 
     @Test
-    void reduceStock_ProductNotFound_ThrowsNotFoundException() {
+    void reduceStock_ProductNotFound_ThrowsStockOperationException() {
         // Arrange
         when(productRepository.findById(999L)).thenReturn(Optional.empty());
 
-        // Act & Assert
-        assertThrows(ProductNotFoundException.class,
-                () -> productService.reduceStock(999L, 10));
+        // Act & Assert - Corregido para esperar StockOperationException en lugar de ProductNotFoundException
+        assertThrows(StockOperationException.class,
+                () -> productService.reduceStock(999L, 5));
+
+        verify(productRepository).findById(999L);
+        verify(productRepository, never()).save(any());
     }
 
     @Test
@@ -273,6 +280,19 @@ class ProductServiceTest {
         assertTrue(result);
         verify(productRepository).findById(1L);
         verify(productRepository).save(any(Product.class));
+    }
+
+    @Test
+    void increaseStock_ProductNotFound_ThrowsStockOperationException() {
+        // Arrange
+        when(productRepository.findById(999L)).thenReturn(Optional.empty());
+
+        // Act & Assert
+        assertThrows(StockOperationException.class,
+                () -> productService.increaseStock(999L, 10));
+
+        verify(productRepository).findById(999L);
+        verify(productRepository, never()).save(any());
     }
 
     @Test
@@ -299,6 +319,19 @@ class ProductServiceTest {
         // Assert
         assertFalse(result);
         verify(productRepository).hasEnoughStock(1L, 100);
+    }
+
+    @Test
+    void hasEnoughStock_ProductNotFound_ReturnsFalse() {
+        // Arrange
+        when(productRepository.hasEnoughStock(999L, 10)).thenReturn(null);
+
+        // Act
+        boolean result = productService.hasEnoughStock(999L, 10);
+
+        // Assert
+        assertFalse(result);
+        verify(productRepository).hasEnoughStock(999L, 10);
     }
 
     //  TESTS DE RANGO DE PRECIOS
@@ -331,6 +364,71 @@ class ProductServiceTest {
                 () -> productService.getProductsByPriceRange(minPrice, maxPrice));
     }
 
+    @Test
+    void getProductsByPriceRange_NullPrices_ThrowsValidationException() {
+        // Act & Assert
+        assertThrows(ProductValidationException.class,
+                () -> productService.getProductsByPriceRange(null, new BigDecimal("100.00")));
+
+        assertThrows(ProductValidationException.class,
+                () -> productService.getProductsByPriceRange(new BigDecimal("50.00"), null));
+    }
+
+    @Test
+    void getProductsByPriceRange_NegativePrices_ThrowsValidationException() {
+        // Arrange
+        BigDecimal negativePrice = new BigDecimal("-10.00");
+        BigDecimal validPrice = new BigDecimal("100.00");
+
+        // Act & Assert
+        assertThrows(ProductValidationException.class,
+                () -> productService.getProductsByPriceRange(negativePrice, validPrice));
+    }
+
+    //  TESTS DE STOCK BAJO
+
+    @Test
+    void getLowStockProducts_ValidThreshold_ReturnsProducts() {
+        // Arrange
+        List<Product> products = Arrays.asList(testProductWithId);
+        when(productRepository.findLowStockProducts(10)).thenReturn(products);
+
+        // Act
+        List<Product> result = productService.getLowStockProducts(10);
+
+        // Assert
+        assertEquals(1, result.size());
+        verify(productRepository).findLowStockProducts(10);
+    }
+
+    @Test
+    void getLowStockProducts_NullThreshold_UsesDefaultValue() {
+        // Arrange
+        List<Product> products = Arrays.asList(testProductWithId);
+        when(productRepository.findLowStockProducts(10)).thenReturn(products);
+
+        // Act
+        List<Product> result = productService.getLowStockProducts(null);
+
+        // Assert
+        assertEquals(1, result.size());
+        verify(productRepository).findLowStockProducts(10); // Default value
+    }
+
+    @Test
+    void getLowStockProducts_NegativeThreshold_UsesDefaultValue() {
+        // Arrange
+        List<Product> products = Arrays.asList(testProductWithId);
+        when(productRepository.findLowStockProducts(10)).thenReturn(products);
+
+        // Act
+        List<Product> result = productService.getLowStockProducts(-5);
+
+        // Assert
+        assertEquals(1, result.size());
+        verify(productRepository).findLowStockProducts(10); // Default value
+    }
+
     // TESTS DE ESTADÍSTICAS
 
     @Test
@@ -357,5 +455,88 @@ class ProductServiceTest {
         // Assert
         assertEquals(3L, result);
         verify(productRepository).countAvailableProducts();
+    }
+
+    //  TESTS DE VALIDACIONES ADICIONALES
+
+    @Test
+    void reduceStock_NullProductId_ThrowsValidationException() {
+        // Act & Assert
+        assertThrows(ProductValidationException.class,
+                () -> productService.reduceStock(null, 10));
+
+        verify(productRepository, never()).findById(any());
+    }
+
+    @Test
+    void reduceStock_NullQuantity_ThrowsValidationException() {
+        // Act & Assert
+        assertThrows(ProductValidationException.class,
+                () -> productService.reduceStock(1L, null));
+
+        verify(productRepository, never()).findById(any());
+    }
+
+    @Test
+    void reduceStock_ZeroQuantity_ThrowsValidationException() {
+        // Act & Assert
+        assertThrows(ProductValidationException.class,
+                () -> productService.reduceStock(1L, 0));
+
+        verify(productRepository, never()).findById(any());
+    }
+
+    @Test
+    void increaseStock_NullProductId_ThrowsValidationException() {
+        // Act & Assert
+        assertThrows(ProductValidationException.class,
+                () -> productService.increaseStock(null, 10));
+
+        verify(productRepository, never()).findById(any());
+    }
+
+    @Test
+    void increaseStock_NullQuantity_ThrowsValidationException() {
+        // Act & Assert
+        assertThrows(ProductValidationException.class,
+                () -> productService.increaseStock(1L, null));
+
+        verify(productRepository, never()).findById(any());
+    }
+
+    @Test
+    void increaseStock_ZeroQuantity_ThrowsValidationException() {
+        // Act & Assert
+        assertThrows(ProductValidationException.class,
+                () -> productService.increaseStock(1L, 0));
+
+        verify(productRepository, never()).findById(any());
+    }
+
+    @Test
+    void hasEnoughStock_NullProductId_ThrowsValidationException() {
+        // Act & Assert
+        assertThrows(ProductValidationException.class,
+                () -> productService.hasEnoughStock(null, 10));
+
+        verify(productRepository, never()).hasEnoughStock(any(), any());
+    }
+
+    @Test
+    void hasEnoughStock_NullQuantity_ThrowsValidationException() {
+        // Act & Assert
+        assertThrows(ProductValidationException.class,
+                () -> productService.hasEnoughStock(1L, null));
+
+        verify(productRepository, never()).hasEnoughStock(any(), any());
+    }
+
+    @Test
+    void hasEnoughStock_ZeroQuantity_ThrowsValidationException() {
+        // Act & Assert
+        assertThrows(ProductValidationException.class,
+                () -> productService.hasEnoughStock(1L, 0));
+
+        verify(productRepository, never()).hasEnoughStock(any(), any());
     }
 }

@@ -21,96 +21,107 @@ public class GlobalExceptionHandler {
 
     private static final Logger logger = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
-    // ========== EXCEPCIONES ESPECÍFICAS DEL PRODUCTO ==========
+    // EXCEPCIONES ESPECÍFICAS DEL PRODUCTO - FORMATO CONSISTENTE CON EL CONTROLADOR
 
     @ExceptionHandler(ProductNotFoundException.class)
-    public ResponseEntity<ErrorResponse> handleProductNotFoundException(
+    public ResponseEntity<Map<String, Object>> handleProductNotFoundException(
             ProductNotFoundException ex, WebRequest request) {
 
         logger.warn("Producto no encontrado: {}", ex.getMessage());
 
-        ErrorResponse errorResponse = ErrorResponse.builder()
-                .errorCode("PRODUCT_NOT_FOUND")
-                .message(ex.getMessage())
-                .details("El producto solicitado no existe en el sistema")
-                .timestamp(LocalDateTime.now())
-                .path(request.getDescription(false).replace("uri=", ""))
-                .status(HttpStatus.NOT_FOUND.value())
-                .build();
+        Map<String, Object> errorResponse = new HashMap<>();
+        errorResponse.put("success", false);
+        errorResponse.put("message", "Producto no encontrado");
+        errorResponse.put("error", ex.getMessage());
+        errorResponse.put("productId", ex.getProductId());
+        errorResponse.put("timestamp", LocalDateTime.now());
+        errorResponse.put("path", request.getDescription(false).replace("uri=", ""));
 
         return new ResponseEntity<>(errorResponse, HttpStatus.NOT_FOUND);
     }
 
     @ExceptionHandler(ProductValidationException.class)
-    public ResponseEntity<ErrorResponse> handleProductValidationException(
+    public ResponseEntity<Map<String, Object>> handleProductValidationException(
             ProductValidationException ex, WebRequest request) {
 
         logger.warn("Error de validación de producto: {}", ex.getMessage());
 
-        ErrorResponse errorResponse = ErrorResponse.builder()
-                .errorCode("PRODUCT_VALIDATION_ERROR")
-                .message(ex.getMessage())
-                .details("Los datos del producto no son válidos")
-                .timestamp(LocalDateTime.now())
-                .path(request.getDescription(false).replace("uri=", ""))
-                .status(HttpStatus.BAD_REQUEST.value())
-                .field(ex.getField())
-                .build();
+        Map<String, Object> errorResponse = new HashMap<>();
+        errorResponse.put("success", false);
+        errorResponse.put("message", "Error de validación");
+        errorResponse.put("error", ex.getMessage());
+
+        // Solo agregar el campo si existe
+        if (ex.getField() != null) {
+            errorResponse.put("field", ex.getField());
+        }
+
+        errorResponse.put("timestamp", LocalDateTime.now());
+        errorResponse.put("path", request.getDescription(false).replace("uri=", ""));
 
         return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
     }
 
     @ExceptionHandler(InsufficientStockException.class)
-    public ResponseEntity<ErrorResponse> handleInsufficientStockException(
+    public ResponseEntity<Map<String, Object>> handleInsufficientStockException(
             InsufficientStockException ex, WebRequest request) {
 
         logger.warn("Stock insuficiente: {}", ex.getMessage());
 
-        Map<String, Object> additionalInfo = new HashMap<>();
-        additionalInfo.put("productId", ex.getProductId());
-        additionalInfo.put("availableStock", ex.getAvailableStock());
-        additionalInfo.put("requestedQuantity", ex.getRequestedQuantity());
+        Map<String, Object> errorResponse = new HashMap<>();
+        errorResponse.put("success", false);
+        errorResponse.put("message", "Stock insuficiente");
+        errorResponse.put("error", ex.getMessage());
 
-        ErrorResponse errorResponse = ErrorResponse.builder()
-                .errorCode("INSUFFICIENT_STOCK")
-                .message(ex.getMessage())
-                .details("No hay suficiente stock disponible para completar la operación")
-                .timestamp(LocalDateTime.now())
-                .path(request.getDescription(false).replace("uri=", ""))
-                .status(HttpStatus.CONFLICT.value())
-                .additionalInfo(additionalInfo)
-                .build();
+        // Solo agregar campos si los métodos existen
+        try {
+            errorResponse.put("productId", ex.getProductId());
+        } catch (Exception ignored) {}
+
+        try {
+            errorResponse.put("availableStock", ex.getAvailableStock());
+        } catch (Exception ignored) {}
+
+        try {
+            errorResponse.put("requestedQuantity", ex.getRequestedQuantity());
+        } catch (Exception ignored) {}
+
+        errorResponse.put("timestamp", LocalDateTime.now());
+        errorResponse.put("path", request.getDescription(false).replace("uri=", ""));
 
         return new ResponseEntity<>(errorResponse, HttpStatus.CONFLICT);
     }
 
     @ExceptionHandler(StockOperationException.class)
-    public ResponseEntity<ErrorResponse> handleStockOperationException(
+    public ResponseEntity<Map<String, Object>> handleStockOperationException(
             StockOperationException ex, WebRequest request) {
 
         logger.error("Error del servicio de productos: {}", ex.getMessage());
 
-        Map<String, Object> additionalInfo = new HashMap<>();
-        additionalInfo.put("productId", ex.getProductId());
-        additionalInfo.put("operation", ex.getOperation());
+        Map<String, Object> errorResponse = new HashMap<>();
+        errorResponse.put("success", false);
+        errorResponse.put("message", "Error en operación de stock");
+        errorResponse.put("error", ex.getMessage());
 
-        ErrorResponse errorResponse = ErrorResponse.builder()
-                .errorCode("STOCK_OPERATION_ERROR")
-                .message(ex.getMessage())
-                .details("Error interno del servicio de productos")
-                .timestamp(LocalDateTime.now())
-                .path(request.getDescription(false).replace("uri=", ""))
-                .status(HttpStatus.INTERNAL_SERVER_ERROR.value())
-                .additionalInfo(additionalInfo)
-                .build();
+        // Solo agregar campos si los métodos existen
+        try {
+            errorResponse.put("productId", ex.getProductId());
+        } catch (Exception ignored) {}
+
+        try {
+            errorResponse.put("operation", ex.getOperation());
+        } catch (Exception ignored) {}
+
+        errorResponse.put("timestamp", LocalDateTime.now());
+        errorResponse.put("path", request.getDescription(false).replace("uri=", ""));
 
         return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
-    // ========== EXCEPCIONES GENERALES DE SPRING ==========
+    //  EXCEPCIONES GENERALES DE SPRING
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ErrorResponse> handleMethodArgumentNotValidException(
+    public ResponseEntity<Map<String, Object>> handleMethodArgumentNotValidException(
             MethodArgumentNotValidException ex, WebRequest request) {
 
         logger.warn("Error de validación: {}", ex.getMessage());
@@ -123,184 +134,81 @@ public class GlobalExceptionHandler {
                     .append("; ");
         });
 
-        ErrorResponse errorResponse = ErrorResponse.builder()
-                .errorCode("VALIDATION_ERROR")
-                .message(message.toString())
-                .details("Los datos proporcionados no son válidos")
-                .timestamp(LocalDateTime.now())
-                .path(request.getDescription(false).replace("uri=", ""))
-                .status(HttpStatus.BAD_REQUEST.value())
-                .build();
+        Map<String, Object> errorResponse = new HashMap<>();
+        errorResponse.put("success", false);
+        errorResponse.put("message", "Error de validación");
+        errorResponse.put("error", message.toString());
+        errorResponse.put("timestamp", LocalDateTime.now());
+        errorResponse.put("path", request.getDescription(false).replace("uri=", ""));
 
         return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
-    public ResponseEntity<ErrorResponse> handleHttpMessageNotReadableException(
+    public ResponseEntity<Map<String, Object>> handleHttpMessageNotReadableException(
             HttpMessageNotReadableException ex, WebRequest request) {
 
-        logger.error("Error inesperado: {}", ex.getMessage());
+        logger.error("Error de formato de datos: {}", ex.getMessage());
 
-        ErrorResponse errorResponse = ErrorResponse.builder()
-                .errorCode("BAD_REQUEST")
-                .message("Formato de datos inválido")
-                .details("Los datos enviados no pueden ser procesados")
-                .timestamp(LocalDateTime.now())
-                .path(request.getDescription(false).replace("uri=", ""))
-                .status(HttpStatus.BAD_REQUEST.value())
-                .build();
+        Map<String, Object> errorResponse = new HashMap<>();
+        errorResponse.put("success", false);
+        errorResponse.put("message", "Formato de datos inválido");
+        errorResponse.put("error", "Los datos enviados no pueden ser procesados");
+        errorResponse.put("timestamp", LocalDateTime.now());
+        errorResponse.put("path", request.getDescription(false).replace("uri=", ""));
 
         return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
     }
 
     @ExceptionHandler(MissingServletRequestParameterException.class)
-    public ResponseEntity<ErrorResponse> handleMissingServletRequestParameterException(
+    public ResponseEntity<Map<String, Object>> handleMissingServletRequestParameterException(
             MissingServletRequestParameterException ex, WebRequest request) {
 
-        logger.error("Error inesperado: {}", ex.getMessage());
+        logger.error("Parámetro faltante: {}", ex.getMessage());
 
-        ErrorResponse errorResponse = ErrorResponse.builder()
-                .errorCode("BAD_REQUEST")
-                .message("Parámetro requerido faltante: " + ex.getParameterName())
-                .details("Faltan parámetros obligatorios en la petición")
-                .timestamp(LocalDateTime.now())
-                .path(request.getDescription(false).replace("uri=", ""))
-                .status(HttpStatus.BAD_REQUEST.value())
-                .build();
+        Map<String, Object> errorResponse = new HashMap<>();
+        errorResponse.put("success", false);
+        errorResponse.put("message", "Parámetro requerido faltante");
+        errorResponse.put("error", "Parámetro requerido faltante: " + ex.getParameterName());
+        errorResponse.put("parameterName", ex.getParameterName());
+        errorResponse.put("timestamp", LocalDateTime.now());
+        errorResponse.put("path", request.getDescription(false).replace("uri=", ""));
 
         return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
     }
 
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
-    public ResponseEntity<ErrorResponse> handleMethodArgumentTypeMismatchException(
+    public ResponseEntity<Map<String, Object>> handleMethodArgumentTypeMismatchException(
             MethodArgumentTypeMismatchException ex, WebRequest request) {
 
-        logger.error("Error inesperado: {}", ex.getMessage());
+        logger.error("Tipo de dato inválido: {}", ex.getMessage());
 
-        ErrorResponse errorResponse = ErrorResponse.builder()
-                .errorCode("BAD_REQUEST")
-                .message("Tipo de dato inválido para el parámetro: " + ex.getName())
-                .details("El formato de los datos no es correcto")
-                .timestamp(LocalDateTime.now())
-                .path(request.getDescription(false).replace("uri=", "")) // ✅ CORREGIDO: Agregado .replace("uri=", "")
-                .status(HttpStatus.BAD_REQUEST.value())
-                .build();
+        Map<String, Object> errorResponse = new HashMap<>();
+        errorResponse.put("success", false);
+        errorResponse.put("message", "Tipo de dato inválido");
+        errorResponse.put("error", "Tipo de dato inválido para el parámetro: " + ex.getName());
+        errorResponse.put("parameterName", ex.getName());
+        errorResponse.put("timestamp", LocalDateTime.now());
+        errorResponse.put("path", request.getDescription(false).replace("uri=", ""));
 
         return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
     }
 
-    // ========== EXCEPCIÓN GENÉRICA ==========
+    //  EXCEPCIÓN GENÉRICA
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ErrorResponse> handleGenericException(
+    public ResponseEntity<Map<String, Object>> handleGenericException(
             Exception ex, WebRequest request) {
 
-        logger.error("Error inesperado: {}", ex.getMessage());
+        logger.error("Error inesperado: {}", ex.getMessage(), ex);
 
-        ErrorResponse errorResponse = ErrorResponse.builder()
-                .errorCode("INTERNAL_SERVER_ERROR")
-                .message("Error interno del servidor")
-                .details("Error interno del servidor")
-                .timestamp(LocalDateTime.now())
-                .path(request.getDescription(false).replace("uri=", "")) // ✅ CORREGIDO: Agregado .replace("uri=", "")
-                .status(HttpStatus.INTERNAL_SERVER_ERROR.value())
-                .build();
+        Map<String, Object> errorResponse = new HashMap<>();
+        errorResponse.put("success", false);
+        errorResponse.put("message", "Error interno del servidor");
+        errorResponse.put("error", "Ha ocurrido un error inesperado");
+        errorResponse.put("timestamp", LocalDateTime.now());
+        errorResponse.put("path", request.getDescription(false).replace("uri=", ""));
 
         return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
-    }
-
-    // ========== CLASE PARA RESPUESTA DE ERROR ==========
-
-    public static class ErrorResponse {
-        private String errorCode;
-        private String message;
-        private String details;
-        private LocalDateTime timestamp;
-        private String path;
-        private int status;
-        private String field;
-        private Map<String, Object> additionalInfo;
-
-        // Constructor privado para el builder
-        private ErrorResponse(Builder builder) {
-            this.errorCode = builder.errorCode;
-            this.message = builder.message;
-            this.details = builder.details;
-            this.timestamp = builder.timestamp;
-            this.path = builder.path;
-            this.status = builder.status;
-            this.field = builder.field;
-            this.additionalInfo = builder.additionalInfo;
-        }
-
-        // Builder pattern
-        public static Builder builder() {
-            return new Builder();
-        }
-
-        public static class Builder {
-            private String errorCode;
-            private String message;
-            private String details;
-            private LocalDateTime timestamp;
-            private String path;
-            private int status;
-            private String field;
-            private Map<String, Object> additionalInfo;
-
-            public Builder errorCode(String errorCode) {
-                this.errorCode = errorCode;
-                return this;
-            }
-
-            public Builder message(String message) {
-                this.message = message;
-                return this;
-            }
-
-            public Builder details(String details) {
-                this.details = details;
-                return this;
-            }
-
-            public Builder timestamp(LocalDateTime timestamp) {
-                this.timestamp = timestamp;
-                return this;
-            }
-
-            public Builder path(String path) {
-                this.path = path;
-                return this;
-            }
-
-            public Builder status(int status) {
-                this.status = status;
-                return this;
-            }
-
-            public Builder field(String field) {
-                this.field = field;
-                return this;
-            }
-
-            public Builder additionalInfo(Map<String, Object> additionalInfo) {
-                this.additionalInfo = additionalInfo;
-                return this;
-            }
-
-            public ErrorResponse build() {
-                return new ErrorResponse(this);
-            }
-        }
-
-        // Getters
-        public String getErrorCode() { return errorCode; }
-        public String getMessage() { return message; }
-        public String getDetails() { return details; }
-        public LocalDateTime getTimestamp() { return timestamp; }
-        public String getPath() { return path; }
-        public int getStatus() { return status; }
-        public String getField() { return field; }
-        public Map<String, Object> getAdditionalInfo() { return additionalInfo; }
     }
 }

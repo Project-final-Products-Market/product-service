@@ -2,32 +2,63 @@ package com.project_final.product_service.controller;
 
 import com.project_final.product_service.model.Product;
 import com.project_final.product_service.service.ProductService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.NotBlank;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
-@Valid
 @RestController
 @RequestMapping("/api/products")
 @CrossOrigin(origins = "*")
 public class ProductController {
+
+    private static final Logger logger = LoggerFactory.getLogger(ProductController.class);
 
     @Autowired
     private ProductService productService;
 
     // Crear producto
     @PostMapping
-    public ResponseEntity<Product> createProduct(@Valid @RequestBody Product product) {
-        Product createdProduct = productService.createProduct(product);
-        return new ResponseEntity<>(createdProduct, HttpStatus.CREATED);
+    public ResponseEntity<Map<String, Object>> createProduct(@Valid @RequestBody Product product) {
+        logger.info("Petición para crear producto: {}", product.getName());
+
+        try {
+            Product createdProduct = productService.createProduct(product);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Producto creado correctamente");
+            response.put("product", createdProduct);
+            response.put("productId", createdProduct.getId());
+            response.put("name", createdProduct.getName());
+            response.put("price", createdProduct.getPrice());
+            response.put("stock", createdProduct.getStock());
+            response.put("timestamp", LocalDateTime.now());
+
+            logger.info("Producto creado exitosamente con ID: {}", createdProduct.getId());
+            return new ResponseEntity<>(response, HttpStatus.CREATED);
+
+        } catch (RuntimeException e) {
+            logger.error("Error creando producto: {}", e.getMessage());
+
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("message", "Error al crear producto");
+            errorResponse.put("error", e.getMessage());
+            errorResponse.put("timestamp", LocalDateTime.now());
+
+            return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
+        }
     }
 
     // Obtener todos los productos
@@ -47,16 +78,90 @@ public class ProductController {
 
     // Actualizar producto
     @PutMapping("/{id}")
-    public ResponseEntity<Product> updateProduct(@PathVariable Long id, @Valid @RequestBody Product productDetails) {
-        Product updatedProduct = productService.updateProduct(id, productDetails);
-        return new ResponseEntity<>(updatedProduct, HttpStatus.OK);
+    public ResponseEntity<Map<String, Object>> updateProduct(@PathVariable Long id, @Valid @RequestBody Product productDetails) {
+        logger.info("Petición para actualizar producto: {}", id);
+
+        try {
+            Product updatedProduct = productService.updateProduct(id, productDetails);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Producto actualizado correctamente");
+            response.put("product", updatedProduct);
+            response.put("productId", updatedProduct.getId());
+            response.put("name", updatedProduct.getName());
+            response.put("price", updatedProduct.getPrice());
+            response.put("stock", updatedProduct.getStock());
+            response.put("timestamp", LocalDateTime.now());
+
+            logger.info("Producto {} actualizado exitosamente", id);
+            return new ResponseEntity<>(response, HttpStatus.OK);
+
+        } catch (RuntimeException e) {
+            logger.error("Error actualizando producto {}: {}", id, e.getMessage());
+
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("message", "Error al actualizar producto");
+            errorResponse.put("productId", id);
+            errorResponse.put("error", e.getMessage());
+            errorResponse.put("timestamp", LocalDateTime.now());
+
+            return new ResponseEntity<>(errorResponse, HttpStatus.NOT_FOUND);
+        }
     }
 
     // Eliminar producto
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteProduct(@PathVariable Long id) {
-        productService.deleteProduct(id);
-        return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+    public ResponseEntity<Map<String, Object>> deleteProduct(@PathVariable Long id) {
+        logger.info("Petición para eliminar producto: {}", id);
+
+        try {
+            // Obtener información del producto antes de eliminarlo
+            Optional<Product> productToDelete = productService.getProductById(id);
+
+            if (productToDelete.isEmpty()) {
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("success", false);
+                errorResponse.put("message", "Producto no encontrado");
+                errorResponse.put("productId", id);
+                errorResponse.put("timestamp", LocalDateTime.now());
+                return new ResponseEntity<>(errorResponse, HttpStatus.NOT_FOUND);
+            }
+
+            Product product = productToDelete.get();
+
+            // Advertencia si tiene stock
+            if (product.getStock() > 0) {
+                logger.warn("Eliminando producto {} con stock disponible: {}", id, product.getStock());
+            }
+
+            productService.deleteProduct(id);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Producto eliminado correctamente");
+            response.put("productId", id);
+            response.put("deletedProduct", product.getName());
+            response.put("price", product.getPrice());
+            response.put("stockAtDeletion", product.getStock());
+            response.put("timestamp", LocalDateTime.now());
+
+            logger.info("Producto {} eliminado exitosamente", id);
+            return new ResponseEntity<>(response, HttpStatus.OK);
+
+        } catch (RuntimeException e) {
+            logger.error("Error eliminando producto {}: {}", id, e.getMessage());
+
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("message", "Error al eliminar producto");
+            errorResponse.put("productId", id);
+            errorResponse.put("error", e.getMessage());
+            errorResponse.put("timestamp", LocalDateTime.now());
+
+            return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
+        }
     }
 
     // Buscar productos por nombre
@@ -92,16 +197,64 @@ public class ProductController {
 
     // Reducir stock (endpoint interno para Order Service)
     @PutMapping("/{id}/reduce-stock")
-    public ResponseEntity<Boolean> reduceStock(@PathVariable Long id, @RequestParam Integer quantity) {
-        boolean success = productService.reduceStock(id, quantity);
-        return new ResponseEntity<>(success, HttpStatus.OK);
+    public ResponseEntity<Map<String, Object>> reduceStock(@PathVariable Long id, @RequestParam Integer quantity) {
+        logger.info("Petición para reducir stock del producto {}: cantidad {}", id, quantity);
+
+        try {
+            boolean success = productService.reduceStock(id, quantity);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", success);
+            response.put("message", success ? "Stock reducido correctamente" : "No se pudo reducir el stock");
+            response.put("productId", id);
+            response.put("quantityReduced", quantity);
+            response.put("timestamp", LocalDateTime.now());
+
+            return new ResponseEntity<>(response, HttpStatus.OK);
+
+        } catch (RuntimeException e) {
+            logger.error("Error reduciendo stock del producto {}: {}", id, e.getMessage());
+
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("message", "Error al reducir stock");
+            errorResponse.put("productId", id);
+            errorResponse.put("error", e.getMessage());
+            errorResponse.put("timestamp", LocalDateTime.now());
+
+            return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
+        }
     }
 
     // Aumentar stock (endpoint interno para cancelaciones)
     @PutMapping("/{id}/increase-stock")
-    public ResponseEntity<Boolean> increaseStock(@PathVariable Long id, @RequestParam Integer quantity) {
-        boolean success = productService.increaseStock(id, quantity);
-        return new ResponseEntity<>(success, HttpStatus.OK);
+    public ResponseEntity<Map<String, Object>> increaseStock(@PathVariable Long id, @RequestParam Integer quantity) {
+        logger.info("Petición para aumentar stock del producto {}: cantidad {}", id, quantity);
+
+        try {
+            boolean success = productService.increaseStock(id, quantity);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", success);
+            response.put("message", success ? "Stock aumentado correctamente" : "No se pudo aumentar el stock");
+            response.put("productId", id);
+            response.put("quantityAdded", quantity);
+            response.put("timestamp", LocalDateTime.now());
+
+            return new ResponseEntity<>(response, HttpStatus.OK);
+
+        } catch (RuntimeException e) {
+            logger.error("Error aumentando stock del producto {}: {}", id, e.getMessage());
+
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("message", "Error al aumentar stock");
+            errorResponse.put("productId", id);
+            errorResponse.put("error", e.getMessage());
+            errorResponse.put("timestamp", LocalDateTime.now());
+
+            return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
+        }
     }
 
     // Verificar stock disponible

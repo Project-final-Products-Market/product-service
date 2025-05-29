@@ -61,6 +61,12 @@ class ProductModelTest {
         LocalDateTime beforeUpdate = product.getUpdatedAt();
 
         // Act
+        // Agregar una pequeña pausa para asegurar diferencia en timestamps
+        try {
+            Thread.sleep(10);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
         product.setPrice(validPrice);
 
         // Assert
@@ -107,6 +113,12 @@ class ProductModelTest {
         LocalDateTime beforeUpdate = product.getUpdatedAt();
 
         // Act
+        // Agregar una pequeña pausa para asegurar diferencia en timestamps
+        try {
+            Thread.sleep(10);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
         product.setStock(validStock);
 
         // Assert
@@ -142,6 +154,12 @@ class ProductModelTest {
         LocalDateTime beforeUpdate = product.getUpdatedAt();
 
         // Act
+        // Agregar una pequeña pausa para asegurar diferencia en timestamps
+        try {
+            Thread.sleep(10);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
         product.setName("Updated Name");
 
         // Assert
@@ -155,6 +173,12 @@ class ProductModelTest {
         LocalDateTime beforeUpdate = product.getUpdatedAt();
 
         // Act
+        // Agregar una pequeña pausa para asegurar diferencia en timestamps
+        try {
+            Thread.sleep(10);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
         product.setDescription("Updated Description");
 
         // Assert
@@ -330,9 +354,12 @@ class ProductModelTest {
     // TESTS DE VALIDACIONES INTEGRADAS
 
     @Test
-    void stockOperations_UpdateTimestamp() {
+    void stockOperations_UpdateTimestamp() throws InterruptedException {
         // Arrange
         LocalDateTime beforeOperation = product.getUpdatedAt();
+
+        // Simular una pequeña pausa para asegurar diferencia en timestamps
+        Thread.sleep(10);
 
         // Act
         product.reduceStock(10);

@@ -18,13 +18,10 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
-// ========== IMPORTS ESTÁTICOS CORREGIDOS ==========
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
-// Removido import de Hamcrest para evitar conflictos
-// import static org.hamcrest.Matchers.*;
 
 @WebMvcTest(ProductController.class)
 class ProductControllerTest {
@@ -64,25 +61,27 @@ class ProductControllerTest {
     @Test
     void createProduct_ValidProduct_ReturnsCreatedProduct() throws Exception {
         // Arrange
-        when(productService.createProduct(org.mockito.ArgumentMatchers.any(Product.class))).thenReturn(testProductWithId);
+        when(productService.createProduct(any(Product.class))).thenReturn(testProductWithId);
 
         // Act & Assert
         mockMvc.perform(post("/api/products")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(testProduct)))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.id").value(1))
-                .andExpect(jsonPath("$.name").value("Test Product"))
-                .andExpect(jsonPath("$.price").value(99.99))
-                .andExpect(jsonPath("$.stock").value(50));
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.message").value("Producto creado correctamente"))
+                .andExpect(jsonPath("$.product.id").value(1))
+                .andExpect(jsonPath("$.product.name").value("Test Product"))
+                .andExpect(jsonPath("$.product.price").value(99.99))
+                .andExpect(jsonPath("$.product.stock").value(50));
 
-        verify(productService).createProduct(org.mockito.ArgumentMatchers.any(Product.class));
+        verify(productService).createProduct(any(Product.class));
     }
 
     @Test
     void createProduct_InvalidProduct_ReturnsBadRequest() throws Exception {
         // Arrange
-        when(productService.createProduct(org.mockito.ArgumentMatchers.any(Product.class)))
+        when(productService.createProduct(any(Product.class)))
                 .thenThrow(ProductValidationException.emptyName());
 
         // Act & Assert
@@ -90,9 +89,10 @@ class ProductControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(testProduct)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.errorCode").value("PRODUCT_VALIDATION_ERROR"));
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Error al crear producto"));
 
-        verify(productService).createProduct(org.mockito.ArgumentMatchers.any(Product.class));
+        verify(productService).createProduct(any(Product.class));
     }
 
     //  TESTS GET /api/products
@@ -151,23 +151,25 @@ class ProductControllerTest {
         updatedProduct.setPrice(new BigDecimal("199.99"));
         updatedProduct.setStock(100);
 
-        when(productService.updateProduct(eq(1L), org.mockito.ArgumentMatchers.any(Product.class))).thenReturn(updatedProduct);
+        when(productService.updateProduct(eq(1L), any(Product.class))).thenReturn(updatedProduct);
 
         // Act & Assert
         mockMvc.perform(put("/api/products/1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(updatedProduct)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.name").value("Updated Product"))
-                .andExpect(jsonPath("$.price").value(199.99));
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.message").value("Producto actualizado correctamente"))
+                .andExpect(jsonPath("$.product.name").value("Updated Product"))
+                .andExpect(jsonPath("$.product.price").value(199.99));
 
-        verify(productService).updateProduct(eq(1L), org.mockito.ArgumentMatchers.any(Product.class));
+        verify(productService).updateProduct(eq(1L), any(Product.class));
     }
 
     @Test
     void updateProduct_NonExistingId_ReturnsNotFound() throws Exception {
         // Arrange
-        when(productService.updateProduct(eq(999L), org.mockito.ArgumentMatchers.any(Product.class)))
+        when(productService.updateProduct(eq(999L), any(Product.class)))
                 .thenThrow(new ProductNotFoundException(999L));
 
         // Act & Assert
@@ -175,36 +177,45 @@ class ProductControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(testProduct)))
                 .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.errorCode").value("PRODUCT_NOT_FOUND"));
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Error al actualizar producto"));
 
-        verify(productService).updateProduct(eq(999L), org.mockito.ArgumentMatchers.any(Product.class));
+        verify(productService).updateProduct(eq(999L), any(Product.class));
     }
 
     // TESTS DELETE /api/products/{id}
 
     @Test
-    void deleteProduct_ExistingId_ReturnsNoContent() throws Exception {
+    void deleteProduct_ExistingId_ReturnsSuccessMessage() throws Exception {
         // Arrange
+        when(productService.getProductById(1L)).thenReturn(Optional.of(testProductWithId));
         doNothing().when(productService).deleteProduct(1L);
 
         // Act & Assert
         mockMvc.perform(delete("/api/products/1"))
-                .andExpect(status().isNoContent());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.message").value("Producto eliminado correctamente"))
+                .andExpect(jsonPath("$.productId").value(1));
 
         verify(productService).deleteProduct(1L);
     }
 
     @Test
     void deleteProduct_NonExistingId_ReturnsNotFound() throws Exception {
-        // Arrange
-        doThrow(new ProductNotFoundException(999L)).when(productService).deleteProduct(999L);
+        // Arrange - El controlador llama primero a getProductById y luego a deleteProduct
+        when(productService.getProductById(999L)).thenReturn(Optional.empty());
 
         // Act & Assert
         mockMvc.perform(delete("/api/products/999"))
                 .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.errorCode").value("PRODUCT_NOT_FOUND"));
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Producto no encontrado"))
+                .andExpect(jsonPath("$.productId").value(999));
 
-        verify(productService).deleteProduct(999L);
+        // Verificar que solo se llamó a getProductById, no a deleteProduct
+        verify(productService).getProductById(999L);
+        verify(productService, never()).deleteProduct(999L);
     }
 
     //  TESTS GET /api/products/search
@@ -247,7 +258,7 @@ class ProductControllerTest {
     void getProductsByPriceRange_ValidRange_ReturnsProducts() throws Exception {
         // Arrange
         List<Product> products = Arrays.asList(testProductWithId);
-        when(productService.getProductsByPriceRange(org.mockito.ArgumentMatchers.any(BigDecimal.class), org.mockito.ArgumentMatchers.any(BigDecimal.class)))
+        when(productService.getProductsByPriceRange(any(BigDecimal.class), any(BigDecimal.class)))
                 .thenReturn(products);
 
         // Act & Assert
@@ -257,7 +268,7 @@ class ProductControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1));
 
-        verify(productService).getProductsByPriceRange(org.mockito.ArgumentMatchers.any(BigDecimal.class), org.mockito.ArgumentMatchers.any(BigDecimal.class));
+        verify(productService).getProductsByPriceRange(any(BigDecimal.class), any(BigDecimal.class));
     }
 
     //  TESTS GET /api/products/low-stock
@@ -280,7 +291,7 @@ class ProductControllerTest {
     //  TESTS PUT /api/products/{id}/reduce-stock
 
     @Test
-    void reduceStock_ValidOperation_ReturnsTrue() throws Exception {
+    void reduceStock_ValidOperation_ReturnsSuccessResponse() throws Exception {
         // Arrange
         when(productService.reduceStock(1L, 10)).thenReturn(true);
 
@@ -288,13 +299,14 @@ class ProductControllerTest {
         mockMvc.perform(put("/api/products/1/reduce-stock")
                         .param("quantity", "10"))
                 .andExpect(status().isOk())
-                .andExpect(content().string("true"));
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.message").value("Stock reducido correctamente"));
 
         verify(productService).reduceStock(1L, 10);
     }
 
     @Test
-    void reduceStock_InsufficientStock_ReturnsConflict() throws Exception {
+    void reduceStock_InsufficientStock_ReturnsBadRequest() throws Exception {
         // Arrange
         when(productService.reduceStock(1L, 100))
                 .thenThrow(new InsufficientStockException(1L, 50, 100));
@@ -302,10 +314,9 @@ class ProductControllerTest {
         // Act & Assert
         mockMvc.perform(put("/api/products/1/reduce-stock")
                         .param("quantity", "100"))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.errorCode").value("INSUFFICIENT_STOCK"))
-                .andExpect(jsonPath("$.additionalInfo.availableStock").value(50))
-                .andExpect(jsonPath("$.additionalInfo.requestedQuantity").value(100));
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Error al reducir stock"));
 
         verify(productService).reduceStock(1L, 100);
     }
@@ -313,7 +324,7 @@ class ProductControllerTest {
     //  TESTS PUT /api/products/{id}/increase-stock
 
     @Test
-    void increaseStock_ValidOperation_ReturnsTrue() throws Exception {
+    void increaseStock_ValidOperation_ReturnsSuccessResponse() throws Exception {
         // Arrange
         when(productService.increaseStock(1L, 20)).thenReturn(true);
 
@@ -321,7 +332,8 @@ class ProductControllerTest {
         mockMvc.perform(put("/api/products/1/increase-stock")
                         .param("quantity", "20"))
                 .andExpect(status().isOk())
-                .andExpect(content().string("true"));
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.message").value("Stock aumentado correctamente"));
 
         verify(productService).increaseStock(1L, 20);
     }
