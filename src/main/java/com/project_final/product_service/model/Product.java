@@ -1,6 +1,9 @@
 package com.project_final.product_service.model;
 
+import com.project_final.product_service.exceptions.InsufficientStockException;
+import com.project_final.product_service.exceptions.ProductValidationException;
 import jakarta.persistence.*;
+import jakarta.validation.constraints.*;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
@@ -12,15 +15,22 @@ public class Product {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @NotBlank(message = "El nombre del producto es obligatorio")
+    @Size(max = 255, message = "El nombre no puede tener más de 255 caracteres")
     @Column(nullable = false)
     private String name;
 
+    @Size(max = 1000, message = "La descripción no puede tener más de 1000 caracteres")
     @Column(columnDefinition = "TEXT")
     private String description;
 
+    @NotNull(message = "El precio es obligatorio")
+    @DecimalMin(value = "0.01", message = "El precio debe ser mayor que cero")
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal price;
 
+    @NotNull(message = "El stock es obligatorio")
+    @Min(value = 0, message = "El stock no puede ser negativo")
     @Column(nullable = false)
     private Integer stock;
 
@@ -76,6 +86,9 @@ public class Product {
     }
 
     public void setPrice(BigDecimal price) {
+        if (price != null && price.compareTo(BigDecimal.ZERO) <= 0) {
+            throw ProductValidationException.invalidPrice(price.toString());
+        }
         this.price = price;
         this.updatedAt = LocalDateTime.now();
     }
@@ -85,6 +98,9 @@ public class Product {
     }
 
     public void setStock(Integer stock) {
+        if (stock != null && stock < 0) {
+            throw ProductValidationException.negativeStock(stock);
+        }
         this.stock = stock;
         this.updatedAt = LocalDateTime.now();
     }
@@ -110,18 +126,32 @@ public class Product {
         this.updatedAt = LocalDateTime.now();
     }
 
-    // Método para reducir stock
+    // Método para reducir stock con validación mejorada
     public void reduceStock(Integer quantity) {
-        if (this.stock < quantity) {
-            throw new RuntimeException("Stock insuficiente. Stock actual: " + stock + ", cantidad solicitada: " + quantity);
+        if (quantity == null || quantity <= 0) {
+            throw new ProductValidationException("quantity", "La cantidad debe ser mayor que cero");
         }
+
+        if (this.stock < quantity) {
+            throw new InsufficientStockException(this.id, this.stock, quantity);
+        }
+
         this.stock -= quantity;
         this.updatedAt = LocalDateTime.now();
     }
 
-    // Método para aumentar stock
+    // Método para aumentar stock con validación
     public void increaseStock(Integer quantity) {
+        if (quantity == null || quantity <= 0) {
+            throw new ProductValidationException("quantity", "La cantidad debe ser mayor que cero");
+        }
+
         this.stock += quantity;
         this.updatedAt = LocalDateTime.now();
+    }
+
+    // Método para verificar si hay stock suficiente
+    public boolean hasEnoughStock(Integer quantity) {
+        return quantity != null && quantity > 0 && this.stock >= quantity;
     }
 }

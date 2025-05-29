@@ -6,11 +6,15 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.NotBlank;
 
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
+@Valid
 @RestController
 @RequestMapping("/api/products")
 @CrossOrigin(origins = "*")
@@ -21,13 +25,9 @@ public class ProductController {
 
     // Crear producto
     @PostMapping
-    public ResponseEntity<Product> createProduct(@RequestBody Product product) {
-        try {
-            Product createdProduct = productService.createProduct(product);
-            return new ResponseEntity<>(createdProduct, HttpStatus.CREATED);
-        } catch (RuntimeException e) {
-            return new ResponseEntity<>(null, HttpStatus.BAD_REQUEST);
-        }
+    public ResponseEntity<Product> createProduct(@Valid @RequestBody Product product) {
+        Product createdProduct = productService.createProduct(product);
+        return new ResponseEntity<>(createdProduct, HttpStatus.CREATED);
     }
 
     // Obtener todos los productos
@@ -47,24 +47,16 @@ public class ProductController {
 
     // Actualizar producto
     @PutMapping("/{id}")
-    public ResponseEntity<Product> updateProduct(@PathVariable Long id, @RequestBody Product productDetails) {
-        try {
-            Product updatedProduct = productService.updateProduct(id, productDetails);
-            return new ResponseEntity<>(updatedProduct, HttpStatus.OK);
-        } catch (RuntimeException e) {
-            return new ResponseEntity<>(null, HttpStatus.NOT_FOUND);
-        }
+    public ResponseEntity<Product> updateProduct(@PathVariable Long id, @Valid @RequestBody Product productDetails) {
+        Product updatedProduct = productService.updateProduct(id, productDetails);
+        return new ResponseEntity<>(updatedProduct, HttpStatus.OK);
     }
 
     // Eliminar producto
     @DeleteMapping("/{id}")
-    public ResponseEntity<HttpStatus> deleteProduct(@PathVariable Long id) {
-        try {
-            productService.deleteProduct(id);
-            return new ResponseEntity<>(HttpStatus.NO_CONTENT);
-        } catch (RuntimeException e) {
-            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
-        }
+    public ResponseEntity<Void> deleteProduct(@PathVariable Long id) {
+        productService.deleteProduct(id);
+        return new ResponseEntity<>(HttpStatus.NO_CONTENT);
     }
 
     // Buscar productos por nombre
@@ -102,14 +94,14 @@ public class ProductController {
     @PutMapping("/{id}/reduce-stock")
     public ResponseEntity<Boolean> reduceStock(@PathVariable Long id, @RequestParam Integer quantity) {
         boolean success = productService.reduceStock(id, quantity);
-        return new ResponseEntity<>(success, success ? HttpStatus.OK : HttpStatus.BAD_REQUEST);
+        return new ResponseEntity<>(success, HttpStatus.OK);
     }
 
     // Aumentar stock (endpoint interno para cancelaciones)
     @PutMapping("/{id}/increase-stock")
     public ResponseEntity<Boolean> increaseStock(@PathVariable Long id, @RequestParam Integer quantity) {
         boolean success = productService.increaseStock(id, quantity);
-        return new ResponseEntity<>(success, success ? HttpStatus.OK : HttpStatus.BAD_REQUEST);
+        return new ResponseEntity<>(success, HttpStatus.OK);
     }
 
     // Verificar stock disponible
